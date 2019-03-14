@@ -1,0 +1,21 @@
+[package]
+name = "spotify-oauth"
+version = "0.1.0"
+authors = ["FrictionlessPortals <8077147+FrictionlessPortals@users.noreply.github.com>"]
+edition = "2018"
+
+[lib]
+name = "spotify_oauth"
+path = "src/lib.rs"
+
+[dependencies]
+url = "1.7"
+rand = "0.6"
+open = "1.2"
+strum = "0.14"
+chrono = "0.4"
+reqwest = "0.9"
+dotenv = "0.13"
+serde_json = "1.0"
+strum_macros = "0.14"
+serde = { version = "1.0", features = ["derive"] }
