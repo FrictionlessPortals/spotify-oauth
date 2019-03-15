@@ -10,6 +10,10 @@ documentation = "https://docs.rs/spotify-oauth/"
 homepage = "https://github.com/FrictionlessPortals/spotify-oauth"
 repository = "https://github.com/FrictionlessPortals/spotify-oauth"
 keywords = ["spotify", "api", "oauth"]
+exclude = [
+    ".env.example",
+    ".env",
+]
 
 [lib]
 name = "spotify_oauth"
