@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<std::error::Error>> {
 ```
 
 ### API Documentation
-More API information can be located [here]("https://docs.rs/spotify-oauth/").
+More API information can be located [here](https://docs.rs/spotify-oauth/).
 
 ### Contribution
 If you have any suggestions or issues towards this library, please submit an
