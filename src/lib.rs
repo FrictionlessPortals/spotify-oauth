@@ -7,12 +7,13 @@
 //! ```no_run
 //! use std::io::stdin;
 //! use std::str::FromStr;
-//! use spotify_oauth::{SpotifyAuth, SpotifyCallback};
+//! use spotify_oauth::{SpotifyAuth, SpotifyCallback, SpotifyScope};
 //!
 //! fn main() -> Result<(), Box<std::error::Error>> {
 //!
 //!     // Setup Spotify Auth URL
-//!     let auth_url = SpotifyAuth::default().authorize_url()?;
+//!     let auth = SpotifyAuth::new_from_env("code".into(), vec![SpotifyScope::Streaming], false);
+//!     let auth_url = auth.authorize_url()?;
 //!
 //!     // Open the auth URL in the default browser of the user.
 //!     open::that(auth_url)?;
@@ -21,7 +22,7 @@
 //!     let mut buffer = String::new();
 //!     stdin().read_line(&mut buffer)?;
 //!
-//!     let token = SpotifyCallback::from_str(buffer.trim())?.convert_into_token()?;
+//!     let token = SpotifyCallback::from_str(buffer.trim())?.convert_into_token(auth.client_id, auth.client_secret, auth.redirect_uri)?;
 //!
 //!     println!("Token: {:#?}", token);
 //!
@@ -155,19 +156,18 @@ pub enum SpotifyScope {
 ///
 /// # Example
 ///
-/// ```
+/// ```no_run
 /// use spotify_oauth::{SpotifyAuth, SpotifyScope};
 ///
-/// // Create a new spotify auth object with the scope "Streaming" using the default impl.
+/// // Create a new spotify auth object with the scope "Streaming" using the ``new_from_env`` function.
 /// // This object can then be converted into the auth url needed to gain a callback for the token.
-/// let auth = SpotifyAuth {
-///     scope: vec![SpotifyScope::Streaming],
-///     ..Default::default()
-/// };
+/// let auth = SpotifyAuth::new_from_env("code".into(), vec![SpotifyScope::Streaming], false);
 /// ```
 pub struct SpotifyAuth {
     /// The Spotify Application Client ID
     pub client_id: String,
+    /// The Spotify Application Client Secret
+    pub client_secret: String,
     /// Required by the Spotify API.
     pub response_type: String,
     /// The URI to redirect to after the user grants or denies permission.
@@ -192,11 +192,18 @@ impl Default for SpotifyAuth {
         // Load local .env file.
         dotenv().ok();
 
-        SpotifyAuth {
-            client_id: match env::var("CLIENT_ID") {
+        Self {
+            client_id: match env::var("SPOTIFY_CLIENT_ID") {
                 Ok(x) => x,
                 Err(_) => "INVALID_ID".to_string(),
             },
+            client_secret: env::var("SPOTIFY_CLIENT_SECRET")
+                .map_err(|e| {
+                    SpotifyError::new(ErrorKind::ParsingFailed)
+                        .set_cause(e)
+                        .set_context("Spotify Client Redirect URI failed to parse into a URL.")
+                })
+                .unwrap(),
             response_type: "code".to_owned(),
             redirect_uri: Url::parse(
                 &env::var("REDIRECT_URI")
@@ -212,6 +219,106 @@ impl Default for SpotifyAuth {
 
 /// Conversion and helper functions for SpotifyAuth.
 impl SpotifyAuth {
+    /// Generate a new SpotifyAuth structure from values in memory.
+    ///
+    /// This function loads ``SPOTIFY_CLIENT_ID`` and ``SPOTIFY_REDIRECT_ID`` from values given in
+    /// function parameters.
+    ///
+    /// This function also automatically generates a state value of length 20 using a random string generator.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use spotify_oauth::{SpotifyAuth, SpotifyScope};
+    ///
+    /// // SpotifyAuth with the scope "Streaming".
+    /// let auth = SpotifyAuth::new("00000000000".into(), "secret".into(), "code".into(), "http://localhost:8000/callback".into(), vec![SpotifyScope::Streaming], false);
+    ///
+    /// assert_eq!(auth.scope_into_string(), "streaming");
+    /// ```
+    pub fn new(
+        client_id: String,
+        client_secret: String,
+        response_type: String,
+        redirect_uri: String,
+        scope: Vec<SpotifyScope>,
+        show_dialog: bool,
+    ) -> Self {
+        Self {
+            client_id,
+            client_secret,
+            response_type,
+            redirect_uri: Url::parse(&redirect_uri)
+                .map_err(|e| {
+                    SpotifyError::new(ErrorKind::ParsingFailed)
+                        .set_cause(e)
+                        .set_context("Spotify Client Redirect URI failed to parse into a URL.")
+                })
+                .unwrap(),
+            state: generate_random_string(20),
+            scope,
+            show_dialog,
+        }
+    }
+
+    /// Generate a new SpotifyAuth structure from values in the environment.
+    ///
+    /// This function loads ``SPOTIFY_CLIENT_ID`` and ``SPOTIFY_REDIRECT_ID`` from the environment.
+    ///
+    /// This function also automatically generates a state value of length 20 using a random string generator.
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// use spotify_oauth::{SpotifyAuth, SpotifyScope};
+    ///
+    /// // SpotifyAuth with the scope "Streaming".
+    /// let auth = SpotifyAuth::new_from_env("code".into(), vec![SpotifyScope::Streaming], false);
+    ///
+    /// assert_eq!(auth.scope_into_string(), "streaming");
+    /// ```
+    pub fn new_from_env(
+        response_type: String,
+        scope: Vec<SpotifyScope>,
+        show_dialog: bool,
+    ) -> Self {
+        // Load local .env file.
+        dotenv().ok();
+
+        Self {
+            client_id: env::var("SPOTIFY_CLIENT_ID")
+                .map_err(|e| {
+                    SpotifyError::new(ErrorKind::ParsingFailed)
+                        .set_cause(e)
+                        .set_context("Spotify Client ID failed to load from the environment.")
+                })
+                .unwrap(),
+            client_secret: env::var("SPOTIFY_CLIENT_SECRET")
+                .map_err(|e| {
+                    SpotifyError::new(ErrorKind::ParsingFailed)
+                        .set_cause(e)
+                        .set_context("Spotify Client Secre failed to load from the environment.")
+                })
+                .unwrap(),
+            response_type,
+            redirect_uri: Url::parse(
+                &env::var("SPOTIFY_REDIRECT_URI")
+                    .map_err(|e| {
+                        SpotifyError::new(ErrorKind::ParsingFailed)
+                            .set_cause(e)
+                            .set_context(
+                                "Spotify Client Redirect URL failed to load from the environment.",
+                            )
+                    })
+                    .unwrap(),
+            )
+            .unwrap(),
+            state: generate_random_string(20),
+            scope,
+            show_dialog,
+        }
+    }
+
     /// Concatenate the scope vector into a string needed for the authorization URL.
     ///
     /// # Example
@@ -220,10 +327,7 @@ impl SpotifyAuth {
     /// use spotify_oauth::{SpotifyAuth, SpotifyScope};
     ///
     /// // Default SpotifyAuth with the scope "Streaming".
-    /// let auth = SpotifyAuth {
-    ///     scope: vec![SpotifyScope::Streaming],
-    ///     ..Default::default()
-    /// };
+    /// let auth = SpotifyAuth::new("00000000000".into(), "secret".into(), "code".into(), "http://localhost:8000/callback".into(), vec![SpotifyScope::Streaming], false);
     ///
     /// assert_eq!(auth.scope_into_string(), "streaming");
     /// ```
@@ -245,10 +349,8 @@ impl SpotifyAuth {
     /// use spotify_oauth::{SpotifyAuth, SpotifyScope};
     ///
     /// // Default SpotifyAuth with the scope "Streaming" converted into the authorization URL.
-    /// let auth_url = SpotifyAuth {
-    ///     scope: vec![SpotifyScope::Streaming],
-    ///     ..Default::default()
-    /// }.authorize_url().unwrap();
+    /// let auth = SpotifyAuth::new("00000000000".into(), "secret".into(), "code".into(), "http://localhost:8000/callback".into(), vec![SpotifyScope::Streaming], false)
+    ///     .authorize_url().unwrap();
     /// ```
     pub fn authorize_url(&self) -> SpotifyResult<String> {
         let mut url = Url::parse(SPOTIFY_AUTH_URL).map_err(|e| {
@@ -391,13 +493,22 @@ impl SpotifyCallback {
     /// # Example
     ///
     /// ```
-    /// use spotify_oauth::SpotifyCallback;
+    /// use spotify_oauth::{SpotifyAuth, SpotifyCallback, SpotifyScope};
     /// use std::str::FromStr;
     ///
+    /// // Create a new Spotify auth object.
+    /// let auth = SpotifyAuth::new("00000000000".into(), "secret".into(), "code".into(), "http://localhost:8000/callback".into(), vec![SpotifyScope::Streaming], false);
+    ///
     /// // Create a new spotify callback object using the callback url given by the authorization process and convert it into a token.
-    /// let token = SpotifyCallback::from_str("https://example.com/callback?code=NApCCgBkWtQ&state=test").unwrap().convert_into_token();
+    /// let token = SpotifyCallback::from_str("https://example.com/callback?code=NApCCgBkWtQ&state=test").unwrap()
+    ///     .convert_into_token(auth.client_id, auth.client_secret, auth.redirect_uri);
     /// ```
-    pub fn convert_into_token(self) -> SpotifyResult<SpotifyToken> {
+    pub fn convert_into_token(
+        self,
+        client_id: String,
+        client_secret: String,
+        redirect_uri: Url,
+    ) -> SpotifyResult<SpotifyToken> {
         let client = Client::new();
         let mut payload: HashMap<String, String> = HashMap::new();
         payload.insert("grant_type".to_owned(), "authorization_code".to_owned());
@@ -411,29 +522,11 @@ impl SpotifyCallback {
                 Some(x) => x,
             },
         );
-        payload.insert(
-            "redirect_uri".to_owned(),
-            env::var("REDIRECT_URI").map_err(|e| {
-                SpotifyError::new(ErrorKind::ParsingFailed)
-                    .set_cause(e)
-                    .set_context("Spotify Redirect URL failed to load from ENV.")
-            })?,
-        );
+        payload.insert("redirect_uri".to_owned(), redirect_uri.to_string());
 
         let mut response = client
             .post(SPOTIFY_TOKEN_URL)
-            .basic_auth(
-                env::var("CLIENT_ID").map_err(|e| {
-                    SpotifyError::new(ErrorKind::ParsingFailed)
-                        .set_cause(e)
-                        .set_context("Spotify Client ID failed to load from ENV.")
-                })?,
-                Some(env::var("CLIENT_SECRET").map_err(|e| {
-                    SpotifyError::new(ErrorKind::ParsingFailed)
-                        .set_cause(e)
-                        .set_context("Spotify Client Secret failed to load from ENV.")
-                })?),
-            )
+            .basic_auth(client_id, Some(client_secret))
             .form(&payload)
             .send()
             .map_err(|e| {
@@ -474,11 +567,15 @@ impl SpotifyCallback {
 /// # Example
 ///
 /// ```
-/// use spotify_oauth::SpotifyCallback;
+/// use spotify_oauth::{SpotifyAuth, SpotifyScope, SpotifyCallback};
 /// use std::str::FromStr;
 ///
-/// // Create a new spotify token object using the callback object given by the authorization process.
-/// let token = SpotifyCallback::from_str("https://example.com/callback?code=NApCCgBkWtQ&state=test").unwrap().convert_into_token();
+/// // Create a new Spotify auth object.
+/// let auth = SpotifyAuth::new("00000000000".into(), "secret".into(), "code".into(), "http://localhost:8000/callback".into(), vec![SpotifyScope::Streaming], false);   
+///
+/// // Create a new Spotify token object using the callback object given by the authorization process.
+/// let token = SpotifyCallback::from_str("https://example.com/callback?code=NApCCgBkWtQ&state=test").unwrap()
+///     .convert_into_token(auth.client_id, auth.client_secret, auth.redirect_uri);
 /// ```
 #[derive(Serialize, Deserialize, Debug, PartialEq)]
 pub struct SpotifyToken {
