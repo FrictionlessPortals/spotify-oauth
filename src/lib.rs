@@ -469,13 +469,15 @@ impl SpotifyCallback {
         // Form authorisation header.
         let auth_value = base64::encode(&format!("{}:{}", client_id, client_secret));
 
+        // POST the request.
         let mut response = surf::post(SPOTIFY_TOKEN_URL)
-            .set_header("Authorization", auth_value)
+            .set_header("Authorization", format!("Basic {}", auth_value))
             .body_form(&payload)
             .unwrap()
             .await
             .context(SurfError)?;
 
+        // Read the response body.
         let buf = response.body_string().await.unwrap();
 
         if response.status().is_success() {
