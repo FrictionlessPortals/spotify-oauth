@@ -5,12 +5,6 @@
 spotify-oauth is a library for [Spotify Authorization](https://developer.spotify.com/documentation/general/guides/authorization-guide/).
 It features a full implementation of the Authorization Code Flow that Spotify requires a user to undergo before using the web API.
 
-## Installation
-
-```shell
-cargo install spotify-oauth
-```
-
 ## Basic Example
 This example shows how the library can be used to create a full authorization flow for retrieving the token required to use the web API.
 ```rust
