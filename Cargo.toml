@@ -1,6 +1,6 @@
 [package]
 name = "spotify-oauth"
-version = "0.2.0"
+version = "0.3.0"
 authors = ["FrictionlessPortals <8077147+FrictionlessPortals@users.noreply.github.com>"]
 edition = "2018"
 license = "MIT"
@@ -9,7 +9,7 @@ description = "An implementation of the Spotify Authorization Code Flow in Rust"
 documentation = "https://docs.rs/spotify-oauth/"
 homepage = "https://github.com/FrictionlessPortals/spotify-oauth"
 repository = "https://github.com/FrictionlessPortals/spotify-oauth"
-keywords = ["spotify", "api", "oauth"]
+keywords = ["spotify", "api", "oauth", "async"]
 exclude = [
     ".env.example",
     ".env",
@@ -20,15 +20,18 @@ name = "spotify_oauth"
 path = "src/lib.rs"
 
 [dependencies]
-url = "2.0"
+url = "2.1"
 rand = "0.7"
-strum = "0.15"
+strum = "0.17"
 chrono = "0.4"
-reqwest = "0.9"
-dotenv = "0.14"
+surf = "1.0"
+base64 = "0.11"
+dotenv = "0.15"
 serde_json = "1.0"
-strum_macros = "0.15"
+strum_macros = "0.17"
+snafu = "0.6"
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
-open = "1.2"
+async-std = { version = "1.0", features = ["attributes"] }
+open = "1.3"

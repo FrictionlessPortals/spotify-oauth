@@ -5,23 +5,18 @@
 spotify-oauth is a library for [Spotify Authorization](https://developer.spotify.com/documentation/general/guides/authorization-guide/).
 It features a full implementation of the Authorization Code Flow that Spotify requires a user to undergo before using the web API.
 
-## Installation
-
-```shell
-cargo install spotify-oauth
-```
-
 ## Basic Example
 This example shows how the library can be used to create a full authorization flow for retrieving the token required to use the web API.
 ```rust
-use std::io::stdin;
-use std::str::FromStr;
-use spotify_oauth::{SpotifyAuth, SpotifyCallback};
+use std::{io::stdin, str::FromStr, error::Error};
+use spotify_oauth::{SpotifyAuth, SpotifyCallback, SpotifyScope};
 
-fn main() -> Result<(), Box<std::error::Error>> {
+#[async_std::main]
+async fn main() -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
 
     // Setup Spotify Auth URL
-    let auth_url = SpotifyAuth::default().authorize_url()?;
+    let auth = SpotifyAuth::new_from_env("code".into(), vec![SpotifyScope::Streaming], false);
+    let auth_url = auth.authorize_url()?;
 
     // Open the auth URL in the default browser of the user.
     open::that(auth_url)?;
@@ -30,7 +25,9 @@ fn main() -> Result<(), Box<std::error::Error>> {
     let mut buffer = String::new();
     stdin().read_line(&mut buffer)?;
 
-    let token = SpotifyCallback::from_str(buffer.trim())?.convert_into_token()?;
+    // Convert the given callback URL into a token.
+    let token = SpotifyCallback::from_str(buffer.trim())?
+        .convert_into_token(auth.client_id, auth.client_secret, auth.redirect_uri).await?;
 
     println!("Token: {:#?}", token);
 

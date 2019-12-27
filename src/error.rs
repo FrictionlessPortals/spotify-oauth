@@ -1,94 +1,31 @@
 //! Error Type for the API.
 
-use std::error::Error;
-use std::fmt;
+use snafu::Snafu;
+use std::{env, error};
 
 /// Generic Result for the Library
-pub type SpotifyResult<T> = Result<T, SpotifyError>;
+pub type SpotifyResult<T, E = SpotifyError> = Result<T, E>;
 
-/// For distinguishing error kinds in results.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum ErrorKind {
-    /// The required value could not be parsed.
-    ParsingFailed,
-    /// The request to an URL failed.
-    RequestFailed,
-    /// The received callback URL could not be parsed.
-    InvalidCallbackURL,
-}
+#[derive(Debug, Snafu)]
+#[snafu(visibility = "pub(crate)")]
+pub enum SpotifyError {
+    #[snafu(display("Unable to read environment variable: {}", source))]
+    EnvError { source: env::VarError },
 
-impl fmt::Display for ErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            ErrorKind::ParsingFailed => write!(f, "The value failed to parse."),
-            ErrorKind::RequestFailed => write!(f, "The request to the URL failed."),
-            ErrorKind::InvalidCallbackURL => write!(f, "The callback URL is invalid."),
-        }
-    }
-}
+    #[snafu(display("Unable to parse JSON: {}", source))]
+    SerdeError { source: serde_json::Error },
 
-/// General Spotify Error information.
-#[derive(Debug)]
-pub struct SpotifyError {
-    kind: ErrorKind,
-    context: Option<String>,
-    cause: Option<Box<Error + Send + Sync + 'static>>,
-}
+    #[snafu(display("Unable to parse URL: {}", source))]
+    UrlError { source: url::ParseError },
 
-impl SpotifyError {
-    pub fn new(kind: ErrorKind) -> Self {
-        Self {
-            kind,
-            context: None,
-            cause: None,
-        }
-    }
+    #[snafu(display("Token parsing failure: {}", context))]
+    TokenFailure { context: &'static str },
 
-    pub fn set_context<S>(mut self, context: S) -> Self
-    where
-        S: Into<String>,
-    {
-        let context = context.into();
-        self.context = Some(context);
-        self
-    }
+    #[snafu(display("Callback URL parsing failure: {}", context))]
+    CallbackFailure { context: &'static str },
 
-    pub fn set_cause<E>(mut self, cause: E) -> Self
-    where
-        E: Error + Send + Sync + 'static,
-    {
-        let cause = Box::new(cause);
-        self.cause = Some(cause);
-        self
-    }
-
-    pub fn kind(&self) -> ErrorKind {
-        self.kind
-    }
-}
-
-impl Error for SpotifyError {
-    fn description(&self) -> &str {
-        "Spotify Authentication Flow failed."
-    }
-
-    fn cause(&self) -> Option<&Error> {
-        self.cause.as_ref().map(|c| {
-            let c: &Error = c.as_ref();
-            c
-        })
-    }
-}
-
-impl fmt::Display for SpotifyError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "Spotify Authentication Flow failed: {}", self.kind)?;
-        if let Some(ref context) = self.context {
-            writeln!(f, "{}", context)?;
-        }
-        if let Some(ref cause) = self.cause {
-            writeln!(f, "Cause: {}", cause)?;
-        }
-        Ok(())
-    }
+    #[snafu(display("Surf http failure: {}", source))]
+    SurfError {
+        source: Box<dyn error::Error + Send + Sync>,
+    },
 }
